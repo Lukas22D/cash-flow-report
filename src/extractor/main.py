@@ -1,5 +1,7 @@
+import os
 from typing import Dict, Any
 from extractor.excel_reader import extrair_pendencias, extrair_transacoes, extrair_resumo
+from extractor.depara_reader import extrair_responsaveis, extrair_departamentos
 from services.conciliacao_service import ConciliacaoService
 from output.excel_writer import ExcelWriter
 
@@ -32,10 +34,27 @@ def gerar_relatorio_consolidado(caminho_arquivo_entrada: str,
     novas_transacoes = extrair_transacoes(caminho_arquivo_entrada, sheet_novas)
     df_resumo = extrair_resumo(caminho_arquivo_entrada)
     
+    # 1.1. EXTRAÇÃO: Ler dados do DePara (caminho fixo)
+    responsaveis = []
+    departamentos = []
+    
+    # Definir caminho fixo para o arquivo DePara
+    diretorio_atual = os.path.dirname(os.path.abspath(__file__))
+    caminho_depara = os.path.join(diretorio_atual, "depara", "DePara-CashFlow.xlsx")
+    
+    try:
+        responsaveis = extrair_responsaveis(caminho_depara)
+        departamentos = extrair_departamentos(caminho_depara)
+        print(f"✅ DePara carregado: {len(responsaveis)} responsáveis, {len(departamentos)} departamentos")
+    except (FileNotFoundError, ValueError) as e:
+        print(f"⚠️ Aviso: Não foi possível carregar DePara de '{caminho_depara}' ({e}). Continuando sem enriquecimento de dados.")
+    
     # 2. PROCESSAMENTO: Consolidar pendências usando a lógica de negócio
     pendencias_consolidadas = ConciliacaoService.consolidar_pendencias(
         pendencias_existentes, 
-        novas_transacoes
+        novas_transacoes,
+        responsaveis,
+        departamentos
     )
     
     # 3. SAÍDA: Salvar arquivo consolidado
@@ -88,6 +107,7 @@ def gerar_relatorio_consolidado_simples(caminho_arquivo_entrada: str,
 if __name__ == '__main__':
     # Exemplo de uso
     try:
+        # DePara é carregado automaticamente do caminho fixo
         resultado = gerar_relatorio_consolidado("Rel.xlsx", "Rel_cons.xlsx")
         
         print("=" * 60)

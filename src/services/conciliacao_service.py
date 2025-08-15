@@ -1,5 +1,5 @@
 from typing import List, Dict
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from entities.pendencia import Pendencia
 from entities.responsavel import Responsavel
 from entities.departamento import Departamento
@@ -136,9 +136,9 @@ class ConciliacaoService:
         Regras:
         1. RESPONSAVEL: baseado na combinação NOME_BANCO + INFORMACAO_ADICIONAL + TIPO_TRANSACAO
         2. DEPARTAMENTO: baseado no RESPONSAVEL encontrado
-        3. VENCIMENTO: baseado na comparação entre DATA_EXTRATO e data atual
-           - Se DATA_EXTRATO < data atual: VENCIMENTO = ">D+1"
-           - Se DATA_EXTRATO >= data atual: VENCIMENTO = "D1"
+        3. VENCIMENTO: baseado na comparação entre DATA_EXTRATO e (data atual - 1 dia)
+           - Se DATA_EXTRATO < (data atual - 1 dia): VENCIMENTO = ">D+1"
+           - Se DATA_EXTRATO >= (data atual - 1 dia): VENCIMENTO = "D1"
         
         Args:
             pendencia: Pendência a ser processada
@@ -175,11 +175,11 @@ class ConciliacaoService:
     @staticmethod
     def _calcular_vencimento(data_extrato) -> str:
         """
-        Calcula o vencimento baseado na comparação entre DATA_EXTRATO e data atual.
+        Calcula o vencimento baseado na comparação entre DATA_EXTRATO e (data atual - 1 dia).
         
         Regras:
-        - Se DATA_EXTRATO < data atual: VENCIMENTO = ">D+1"
-        - Se DATA_EXTRATO >= data atual: VENCIMENTO = "D1"
+        - Se DATA_EXTRATO < (data atual - 1 dia): VENCIMENTO = ">D+1"
+        - Se DATA_EXTRATO >= (data atual - 1 dia): VENCIMENTO = "D1"
         
         Args:
             data_extrato: Data do extrato (pode ser datetime, date ou None)
@@ -191,8 +191,8 @@ class ConciliacaoService:
             # Se não há data do extrato, considera como vencido
             return ">D+1"
         
-        # Obter data atual
-        data_atual = date.today()
+        # Obter data de referência (data atual - 1 dia)
+        data_referencia = date.today() - timedelta(days=1)
         
         # Converter data_extrato para date se necessário
         if isinstance(data_extrato, datetime):
@@ -210,10 +210,10 @@ class ConciliacaoService:
                     return ">D+1"
         
         # Aplicar regra de negócio
-        if data_extrato < data_atual:
-            return ">D+1"  # Data do extrato é anterior à data atual
+        if data_extrato < data_referencia:
+            return ">D+1"  # Data do extrato é anterior à (data atual - 1 dia)
         else:
-            return "D1"    # Data do extrato é igual ou posterior à data atual
+            return "D1"    # Data do extrato é igual ou posterior à (data atual - 1 dia)
     
     @staticmethod
     def obter_estatisticas_consolidacao(pendencias_existentes: List[Pendencia],

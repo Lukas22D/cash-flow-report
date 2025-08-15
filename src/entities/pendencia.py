@@ -27,7 +27,7 @@ class Pendencia:
     RESPONSAVEL: Optional[str] = None
     OBSERVACAO: Optional[str] = None
     DEPARTAMENTO: Optional[str] = None
-    VENCIMENTO: Optional[datetime] = None
+    VENCIMENTO: Optional[str] = None
 
     def get_chave_reconciliacao(self) -> str:
         """

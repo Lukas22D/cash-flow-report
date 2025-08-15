@@ -83,26 +83,6 @@ def gerar_relatorio_consolidado(caminho_arquivo_entrada: str,
     return estatisticas
 
 
-# Função de compatibilidade com a versão anterior (retorna apenas número de linhas)
-def gerar_relatorio_consolidado_simples(caminho_arquivo_entrada: str, 
-                                       caminho_arquivo_saida: str, 
-                                       sheet_pendencias: str = 'Pendências', 
-                                       sheet_novas: str = 'Sheet1') -> int:
-    """
-    Versão simplificada que retorna apenas o número de linhas consolidadas.
-    Mantida para compatibilidade com código existente.
-    
-    Returns:
-        int: Número de linhas consolidadas
-    """
-    resultado = gerar_relatorio_consolidado(
-        caminho_arquivo_entrada,
-        caminho_arquivo_saida, 
-        sheet_pendencias,
-        sheet_novas
-    )
-    return resultado['total_consolidadas']
-
 
 if __name__ == '__main__':
     # Exemplo de uso

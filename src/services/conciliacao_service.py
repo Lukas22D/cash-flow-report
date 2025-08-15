@@ -1,4 +1,5 @@
 from typing import List, Dict
+from datetime import datetime, date
 from entities.pendencia import Pendencia
 from entities.responsavel import Responsavel
 from entities.departamento import Departamento
@@ -53,8 +54,8 @@ class ConciliacaoService:
                 # Se não existe, usar a nova transação como nova pendência
                 pendencia_final = transacao
             
-            # Aplicar regras de negócio para preencher RESPONSAVEL e DEPARTAMENTO
-            pendencia_final = ConciliacaoService._aplicar_regras_responsavel_departamento(
+            # Aplicar regras de negócio para preencher RESPONSAVEL, DEPARTAMENTO e VENCIMENTO
+            pendencia_final = ConciliacaoService._aplicar_regras_negocio(
                 pendencia_final, responsaveis_dict, departamentos_dict
             )
             
@@ -126,15 +127,18 @@ class ConciliacaoService:
         return departamentos_dict
     
     @staticmethod
-    def _aplicar_regras_responsavel_departamento(pendencia: Pendencia, 
-                                               responsaveis_dict: Dict[str, Responsavel],
-                                               departamentos_dict: Dict[str, Departamento]) -> Pendencia:
+    def _aplicar_regras_negocio(pendencia: Pendencia, 
+                               responsaveis_dict: Dict[str, Responsavel],
+                               departamentos_dict: Dict[str, Departamento]) -> Pendencia:
         """
-        Aplica as regras de negócio para preencher RESPONSAVEL e DEPARTAMENTO da pendência.
+        Aplica as regras de negócio para preencher RESPONSAVEL, DEPARTAMENTO e VENCIMENTO da pendência.
         
         Regras:
         1. RESPONSAVEL: baseado na combinação NOME_BANCO + INFORMACAO_ADICIONAL + TIPO_TRANSACAO
         2. DEPARTAMENTO: baseado no RESPONSAVEL encontrado
+        3. VENCIMENTO: baseado na comparação entre DATA_EXTRATO e data atual
+           - Se DATA_EXTRATO < data atual: VENCIMENTO = ">D+1"
+           - Se DATA_EXTRATO >= data atual: VENCIMENTO = "D1"
         
         Args:
             pendencia: Pendência a ser processada
@@ -162,7 +166,54 @@ class ConciliacaoService:
             departamento_encontrado = departamentos_dict[pendencia.RESPONSAVEL]
             pendencia.DEPARTAMENTO = departamento_encontrado.AREA
         
+        # 3ª Regra: Definir VENCIMENTO
+        # Baseado na comparação entre DATA_EXTRATO e data atual
+        pendencia.VENCIMENTO = ConciliacaoService._calcular_vencimento(pendencia.DATA_EXTRATO)
+        
         return pendencia
+    
+    @staticmethod
+    def _calcular_vencimento(data_extrato) -> str:
+        """
+        Calcula o vencimento baseado na comparação entre DATA_EXTRATO e data atual.
+        
+        Regras:
+        - Se DATA_EXTRATO < data atual: VENCIMENTO = ">D+1"
+        - Se DATA_EXTRATO >= data atual: VENCIMENTO = "D1"
+        
+        Args:
+            data_extrato: Data do extrato (pode ser datetime, date ou None)
+            
+        Returns:
+            str: String do vencimento ("D1" ou ">D+1")
+        """
+        if data_extrato is None:
+            # Se não há data do extrato, considera como vencido
+            return ">D+1"
+        
+        # Obter data atual
+        data_atual = date.today()
+        
+        # Converter data_extrato para date se necessário
+        if isinstance(data_extrato, datetime):
+            data_extrato = data_extrato.date()
+        elif isinstance(data_extrato, str):
+            try:
+                # Tentar converter string para date (formato comum: YYYY-MM-DD)
+                data_extrato = datetime.strptime(data_extrato, '%Y-%m-%d').date()
+            except ValueError:
+                try:
+                    # Tentar formato brasileiro: DD/MM/YYYY
+                    data_extrato = datetime.strptime(data_extrato, '%d/%m/%Y').date()
+                except ValueError:
+                    # Se não conseguir converter, considera como vencido
+                    return ">D+1"
+        
+        # Aplicar regra de negócio
+        if data_extrato < data_atual:
+            return ">D+1"  # Data do extrato é anterior à data atual
+        else:
+            return "D1"    # Data do extrato é igual ou posterior à data atual
     
     @staticmethod
     def obter_estatisticas_consolidacao(pendencias_existentes: List[Pendencia],

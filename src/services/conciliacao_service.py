@@ -136,9 +136,10 @@ class ConciliacaoService:
         Regras:
         1. RESPONSAVEL: baseado na combinação NOME_BANCO + INFORMACAO_ADICIONAL + TIPO_TRANSACAO
         2. DEPARTAMENTO: baseado no RESPONSAVEL encontrado
-        3. VENCIMENTO: baseado na comparação entre DATA_EXTRATO e (data atual - 1 dia)
-           - Se DATA_EXTRATO < (data atual - 1 dia): VENCIMENTO = ">D+1"
-           - Se DATA_EXTRATO >= (data atual - 1 dia): VENCIMENTO = "D1"
+        3. VENCIMENTO: baseado na comparação entre DATA_EXTRATO e último dia útil anterior
+           - Se DATA_EXTRATO < último dia útil anterior: VENCIMENTO = ">D+1"
+           - Se DATA_EXTRATO >= último dia útil anterior: VENCIMENTO = "D1"
+           - Considera apenas dias úteis (Segunda a Sexta)
         
         Args:
             pendencia: Pendência a ser processada
@@ -175,11 +176,17 @@ class ConciliacaoService:
     @staticmethod
     def _calcular_vencimento(data_extrato) -> str:
         """
-        Calcula o vencimento baseado na comparação entre DATA_EXTRATO e (data atual - 1 dia).
+        Calcula o vencimento baseado na comparação entre DATA_EXTRATO e (último dia útil anterior).
         
         Regras:
-        - Se DATA_EXTRATO < (data atual - 1 dia): VENCIMENTO = ">D+1"
-        - Se DATA_EXTRATO >= (data atual - 1 dia): VENCIMENTO = "D1"
+        - Se DATA_EXTRATO < (último dia útil anterior): VENCIMENTO = ">D+1"
+        - Se DATA_EXTRATO >= (último dia útil anterior): VENCIMENTO = "D1"
+        
+        Dias úteis: Segunda a Sexta (exclui sábados e domingos)
+        Exemplos:
+        - Se executado na Segunda: compara com Sexta anterior
+        - Se executado na Terça: compara com Segunda anterior
+        - Se executado no Sábado: compara com Sexta anterior
         
         Args:
             data_extrato: Data do extrato (pode ser datetime, date ou None)
@@ -191,8 +198,8 @@ class ConciliacaoService:
             # Se não há data do extrato, considera como vencido
             return ">D+1"
         
-        # Obter data de referência (data atual - 1 dia)
-        data_referencia = date.today() - timedelta(days=1)
+        # Obter data de referência (último dia útil anterior)
+        data_referencia = ConciliacaoService._obter_ultimo_dia_util_anterior()
         
         # Converter data_extrato para date se necessário
         if isinstance(data_extrato, datetime):
@@ -211,9 +218,41 @@ class ConciliacaoService:
         
         # Aplicar regra de negócio
         if data_extrato < data_referencia:
-            return ">D+1"  # Data do extrato é anterior à (data atual - 1 dia)
+            return ">D+1"  # Data do extrato é anterior ao último dia útil anterior
         else:
-            return "D1"    # Data do extrato é igual ou posterior à (data atual - 1 dia)
+            return "D1"    # Data do extrato é igual ou posterior ao último dia útil anterior
+    
+    @staticmethod
+    def _obter_ultimo_dia_util_anterior() -> date:
+        """
+        Obtém o último dia útil anterior à data atual.
+        
+        Lógica:
+        - Segunda-feira (0): retorna Sexta anterior (3 dias atrás)
+        - Terça-feira (1): retorna Segunda anterior (1 dia atrás)
+        - Quarta-feira (2): retorna Terça anterior (1 dia atrás)
+        - Quinta-feira (3): retorna Quarta anterior (1 dia atrás)
+        - Sexta-feira (4): retorna Quinta anterior (1 dia atrás)
+        - Sábado (5): retorna Sexta anterior (1 dia atrás)
+        - Domingo (6): retorna Sexta anterior (2 dias atrás)
+        
+        Returns:
+            date: Data do último dia útil anterior
+        """
+        data_atual = date.today()
+        dia_semana = data_atual.weekday()  # 0=Segunda, 1=Terça, ..., 6=Domingo
+        
+        if dia_semana == 0:  # Segunda-feira
+            # Voltar para sexta-feira anterior (3 dias atrás)
+            dias_para_voltar = 3
+        elif dia_semana == 6:  # Domingo
+            # Voltar para sexta-feira anterior (2 dias atrás)
+            dias_para_voltar = 2
+        else:  # Terça a Sábado
+            # Voltar 1 dia (dia útil anterior)
+            dias_para_voltar = 1
+        
+        return data_atual - timedelta(days=dias_para_voltar)
     
     @staticmethod
     def obter_estatisticas_consolidacao(pendencias_existentes: List[Pendencia],

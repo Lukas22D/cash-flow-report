@@ -296,16 +296,30 @@ class CashFlowApp:
             self.log(f"📈 Pendências preservadas: {resultado['pendencias_preservadas']}")
             self.log(f"📈 Novas pendências adicionadas: {resultado['novas_pendencias_adicionadas']}")
             self.log(f"📊 Resumo incluído: {'Sim' if resultado['tem_resumo'] else 'Não'}")
+            self.log("")
+            self.log("📊 RESUMO DE PENDÊNCIAS GERADO:")
+            self.log(f"   • Departamentos processados: {resultado['total_departamentos']}")
+            self.log(f"   • Pendências D1: {resultado['total_d1']}")
+            self.log(f"   • Pendências >D+1: {resultado['total_d_mais_1']}")
+            self.log(f"   • Pendências sem vencimento: {resultado['total_vazio']}")
+            self.log(f"   • Total geral: {resultado['total_geral_absoluto']}")
+            self.log(f"   • Dia útil de referência: {resultado['dia_util_referencia']}")
             self.log(f"💾 Arquivo salvo em: {arquivo_saida}")
             self.log("=" * 60)
             
             # Perguntar se quer abrir o diretório
             resposta = messagebox.askyesno("🎉 Sucesso!", 
                                          f"Relatório gerado com sucesso!\n\n"
-                                         f"📊 Linhas consolidadas: {resultado['total_consolidadas']}\n"
-                                         f"📈 Pendências preservadas: {resultado['pendencias_preservadas']}\n"
-                                         f"📈 Novas pendências: {resultado['novas_pendencias_adicionadas']}\n"
-                                         f"📊 Resumo: {'Incluído' if resultado['tem_resumo'] else 'Não encontrado'}\n"
+                                         f"📊 CONCILIAÇÃO:\n"
+                                         f"   • Linhas consolidadas: {resultado['total_consolidadas']}\n"
+                                         f"   • Pendências preservadas: {resultado['pendencias_preservadas']}\n"
+                                         f"   • Novas pendências: {resultado['novas_pendencias_adicionadas']}\n"
+                                         f"   • Resumo original: {'Incluído' if resultado['tem_resumo'] else 'Não encontrado'}\n\n"
+                                         f"📊 RESUMO DE PENDÊNCIAS:\n"
+                                         f"   • Departamentos: {resultado['total_departamentos']}\n"
+                                         f"   • D1: {resultado['total_d1']} | >D+1: {resultado['total_d_mais_1']} | Vazios: {resultado['total_vazio']}\n"
+                                         f"   • Total: {resultado['total_geral_absoluto']}\n"
+                                         f"   • Dia útil: {resultado['dia_util_referencia']}\n\n"
                                          f"💾 Arquivo salvo em:\n{arquivo_saida}\n\n"
                                          f"Deseja abrir a pasta onde o arquivo foi salvo?")
             

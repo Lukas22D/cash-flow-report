@@ -1,6 +1,7 @@
 import pandas as pd
 from typing import List
 from entities.pendencia import Pendencia
+from services.resumo_service import ResumoService
 
 
 class ExcelWriter:
@@ -28,14 +29,21 @@ class ExcelWriter:
             # Converter pendências para DataFrame
             df_pendencias = ExcelWriter._pendencias_para_dataframe(pendencias_consolidadas)
             
+            # Gerar resumo das pendências
+            resumo_consolidado = ResumoService.gerar_resumo(pendencias_consolidadas)
+            df_resumo_pendencias = ExcelWriter._resumo_para_dataframe(resumo_consolidado)
+            
             # Escrever no arquivo Excel
             with pd.ExcelWriter(caminho_saida, engine='openpyxl') as writer:
                 # Aba de Pendências
                 df_pendencias.to_excel(writer, sheet_name='Pendências', index=False)
                 
-                # Aba de Resumo (se existir dados)
+                # Aba de Resumo (se existir dados do arquivo original)
                 if not df_resumo.empty:
                     df_resumo.to_excel(writer, sheet_name='Resumo', index=False)
+                
+                # Aba de Resumo de Pendências (sempre gerada)
+                df_resumo_pendencias.to_excel(writer, sheet_name='Resumo Pendências', index=False)
                     
         except PermissionError:
             raise PermissionError(f"Não foi possível salvar o arquivo. "
@@ -85,6 +93,25 @@ class ExcelWriter:
         # Reordenar colunas, mantendo apenas as que existem
         colunas_existentes = [col for col in colunas_ordenadas if col in df.columns]
         df = df[colunas_existentes]
+        
+        return df
+    
+    @staticmethod
+    def _resumo_para_dataframe(resumo_consolidado) -> pd.DataFrame:
+        """
+        Converte o resumo consolidado para DataFrame pandas.
+        
+        Args:
+            resumo_consolidado: Objeto ResumoConsolidado
+            
+        Returns:
+            pd.DataFrame: DataFrame com os dados do resumo
+        """
+        # Usar o método do ResumoService para gerar dados estruturados
+        dados_excel = ResumoService.gerar_dados_excel(resumo_consolidado)
+        
+        # Criar DataFrame
+        df = pd.DataFrame(dados_excel)
         
         return df
     

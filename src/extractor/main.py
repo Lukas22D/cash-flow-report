@@ -1,39 +1,50 @@
 import os
 from typing import Dict, Any
-from extractor.excel_reader import extrair_pendencias, extrair_transacoes, extrair_resumo
+from extractor.excel_reader import extrair_pendencias, extrair_resumo
+from extractor.rel_sem_tratar_reader import extrair_novas_transacoes_rel_sem_tratar
 from extractor.depara_reader import extrair_responsaveis, extrair_departamentos
 from services.conciliacao_service import ConciliacaoService
 from services.resumo_service import ResumoService
 from output.excel_writer import ExcelWriter
 
 
-def gerar_relatorio_consolidado(caminho_arquivo_entrada: str, 
-                               caminho_arquivo_saida: str, 
-                               sheet_pendencias: str = 'Pendências', 
-                               sheet_novas: str = 'Sheet1') -> Dict[str, Any]:
+def gerar_relatorio_consolidado(caminho_rel_sem_tratar: str,
+                               caminho_pendencias_antigas: str,
+                               caminho_arquivo_saida: str,
+                               sheet_pendencias: str = 'Pendências') -> Dict[str, Any]:
     """
     Função principal que orquestra o processo de geração do relatório consolidado.
     
     Args:
-        caminho_arquivo_entrada: Caminho completo para o arquivo de entrada (.xlsx)
+        caminho_rel_sem_tratar: Caminho para o arquivo Rel_sem_tratar.xlsx (novas transações)
+        caminho_pendencias_antigas: Caminho para o arquivo com pendências antigas
         caminho_arquivo_saida: Caminho completo para salvar o arquivo gerado (.xlsx)
         sheet_pendencias: Nome da aba com as pendências existentes (padrão: 'Pendências')
-        sheet_novas: Nome da aba com as novas transações (padrão: 'Sheet1')
         
     Returns:
         Dict[str, Any]: Dicionário com estatísticas do processamento
         
     Raises:
-        FileNotFoundError: Se o arquivo de entrada não for encontrado
+        FileNotFoundError: Se algum arquivo não for encontrado
         ValueError: Se as abas especificadas não existirem
         PermissionError: Se não conseguir salvar o arquivo de saída
         Exception: Outros erros durante o processamento
     """
     
-    # 1. EXTRAÇÃO: Ler dados do Excel
-    pendencias_existentes = extrair_pendencias(caminho_arquivo_entrada, sheet_pendencias)
-    novas_transacoes = extrair_transacoes(caminho_arquivo_entrada, sheet_novas)
-    df_resumo = extrair_resumo(caminho_arquivo_entrada)
+    # 1. EXTRAÇÃO: Ler dados dos arquivos Excel
+    # 1.1. Extrair novas transações do Rel_sem_tratar.xlsx
+    novas_transacoes = extrair_novas_transacoes_rel_sem_tratar(caminho_rel_sem_tratar)
+    
+    # 1.2. Extrair pendências antigas do arquivo separado
+    pendencias_existentes = extrair_pendencias(caminho_pendencias_antigas, sheet_pendencias)
+    
+    # 1.3. Tentar extrair resumo do arquivo de pendências antigas (opcional)
+    try:
+        df_resumo = extrair_resumo(caminho_pendencias_antigas)
+    except:
+        # Se não conseguir extrair resumo, usar DataFrame vazio
+        import pandas as pd
+        df_resumo = pd.DataFrame()
     
     # 1.1. EXTRAÇÃO: Ler dados do DePara (caminho fixo)
     responsaveis = []
@@ -90,10 +101,10 @@ def gerar_relatorio_consolidado(caminho_arquivo_entrada: str,
     
     # Adicionar informações dos arquivos
     estatisticas.update({
-        'arquivo_entrada': caminho_arquivo_entrada,
+        'arquivo_rel_sem_tratar': caminho_rel_sem_tratar,
+        'arquivo_pendencias_antigas': caminho_pendencias_antigas,
         'arquivo_saida': caminho_arquivo_saida,
         'sheet_pendencias': sheet_pendencias,
-        'sheet_novas': sheet_novas,
         'tem_resumo': not df_resumo.empty,
         **estatisticas_resumo
     })
@@ -106,14 +117,18 @@ if __name__ == '__main__':
     # Exemplo de uso
     try:
         # DePara é carregado automaticamente do caminho fixo
-        resultado = gerar_relatorio_consolidado("Rel.xlsx", "Rel_cons.xlsx")
+        resultado = gerar_relatorio_consolidado(
+            "docs/Rel_sem_tratar.xlsx", 
+            "docs/Pendencias_Antigas_Exemplo.xlsx",
+            "Rel_cons.xlsx"
+        )
         
         print("=" * 60)
         print("🎉 RELATÓRIO GERADO COM SUCESSO!")
         print("=" * 60)
-        print(f"📂 Arquivo de entrada: {resultado['arquivo_entrada']}")
+        print(f"📊 Rel_sem_tratar: {resultado['arquivo_rel_sem_tratar']}")
+        print(f"📋 Pendências antigas: {resultado['arquivo_pendencias_antigas']}")
         print(f"📋 Sheet pendências: {resultado['sheet_pendencias']}")
-        print(f"📋 Sheet novas transações: {resultado['sheet_novas']}")
         print(f"💾 Arquivo de saída: {resultado['arquivo_saida']}")
         print(f"📊 Resumo incluído: {'Sim' if resultado['tem_resumo'] else 'Não'}")
         print()

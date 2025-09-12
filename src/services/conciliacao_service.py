@@ -135,11 +135,16 @@ class ConciliacaoService:
         
         Regras:
         1. RESPONSAVEL: baseado na combinação NOME_BANCO + INFORMACAO_ADICIONAL + TIPO_TRANSACAO
+           - Só preenche se o campo RESPONSAVEL estiver vazio
+           - Preserva valores já preenchidos
         2. DEPARTAMENTO: baseado no RESPONSAVEL encontrado
+           - Só preenche se o campo DEPARTAMENTO estiver vazio
+           - Preserva valores já preenchidos
         3. VENCIMENTO: baseado na comparação entre DATA_EXTRATO e último dia útil anterior
            - Se DATA_EXTRATO < último dia útil anterior: VENCIMENTO = ">D+1"
            - Se DATA_EXTRATO >= último dia útil anterior: VENCIMENTO = "D1"
            - Considera apenas dias úteis (Segunda a Sexta)
+           - Sempre atualiza o campo VENCIMENTO
         
         Args:
             pendencia: Pendência a ser processada
@@ -150,20 +155,22 @@ class ConciliacaoService:
             Pendencia: Pendência com campos atualizados
         """
         # 1ª Regra: Definir RESPONSAVEL
-        # Criar chave de busca baseada nos campos da pendência
-        nome_banco = str(pendencia.NOME_BANCO) if pendencia.NOME_BANCO is not None else ""
-        info_adicional = str(pendencia.INFORMACAO_ADICIONAL) if pendencia.INFORMACAO_ADICIONAL is not None else ""
-        tipo_transacao = str(pendencia.TIPO_TRANSACAO) if pendencia.TIPO_TRANSACAO is not None else ""
-        
-        chave_responsavel = f"{nome_banco}{info_adicional}{tipo_transacao}"
-        
-        if chave_responsavel in responsaveis_dict:
-            responsavel_encontrado = responsaveis_dict[chave_responsavel]
-            pendencia.RESPONSAVEL = responsavel_encontrado.RESPONSAVEL
+        # Só preenche se não houver RESPONSAVEL já definido
+        if not pendencia.RESPONSAVEL:
+            # Criar chave de busca baseada nos campos da pendência
+            nome_banco = str(pendencia.NOME_BANCO) if pendencia.NOME_BANCO is not None else ""
+            info_adicional = str(pendencia.INFORMACAO_ADICIONAL) if pendencia.INFORMACAO_ADICIONAL is not None else ""
+            tipo_transacao = str(pendencia.TIPO_TRANSACAO) if pendencia.TIPO_TRANSACAO is not None else ""
+            
+            chave_responsavel = f"{nome_banco}{info_adicional}{tipo_transacao}"
+            
+            if chave_responsavel in responsaveis_dict:
+                responsavel_encontrado = responsaveis_dict[chave_responsavel]
+                pendencia.RESPONSAVEL = responsavel_encontrado.RESPONSAVEL
         
         # 2ª Regra: Definir DEPARTAMENTO
-        # Só processa se o RESPONSAVEL foi definido
-        if pendencia.RESPONSAVEL and pendencia.RESPONSAVEL in departamentos_dict:
+        # Só preenche se não houver DEPARTAMENTO já definido e se o RESPONSAVEL foi definido
+        if not pendencia.DEPARTAMENTO and pendencia.RESPONSAVEL and pendencia.RESPONSAVEL in departamentos_dict:
             departamento_encontrado = departamentos_dict[pendencia.RESPONSAVEL]
             pendencia.DEPARTAMENTO = departamento_encontrado.AREA
         

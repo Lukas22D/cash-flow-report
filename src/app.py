@@ -243,7 +243,6 @@ class CashFlowApp:
             self.log(f"   • Departamentos processados: {resultado['total_departamentos']}")
             self.log(f"   • Pendências D1: {resultado['total_d1']}")
             self.log(f"   • Pendências >D+1: {resultado['total_d_mais_1']}")
-            self.log(f"   • Pendências sem vencimento: {resultado['total_vazio']}")
             self.log(f"   • Total geral: {resultado['total_geral_absoluto']}")
             self.log(f"   • Dia útil de referência: {resultado['dia_util_referencia']}")
             self.log(f"💾 Arquivo salvo em: {arquivo_saida}")
@@ -259,7 +258,7 @@ class CashFlowApp:
                                          f"   • Resumo original: {'Incluído' if resultado['tem_resumo'] else 'Não encontrado'}\n\n"
                                          f"📊 RESUMO DE PENDÊNCIAS:\n"
                                          f"   • Departamentos: {resultado['total_departamentos']}\n"
-                                         f"   • D1: {resultado['total_d1']} | >D+1: {resultado['total_d_mais_1']} | Vazios: {resultado['total_vazio']}\n"
+                                         f"   • D1: {resultado['total_d1']} | >D+1: {resultado['total_d_mais_1']}\n"
                                          f"   • Total: {resultado['total_geral_absoluto']}\n"
                                          f"   • Dia útil: {resultado['dia_util_referencia']}\n\n"
                                          f"💾 Arquivo salvo em:\n{arquivo_saida}\n\n"

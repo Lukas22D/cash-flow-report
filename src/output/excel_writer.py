@@ -2,10 +2,12 @@ import pandas as pd
 from typing import List
 from entities.pendencia import Pendencia
 from services.resumo_service import ResumoService
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.worksheet.table import Table, TableStyleInfo
+import xlsxwriter
+import os
 
 
 class ExcelWriter:
@@ -35,27 +37,9 @@ class ExcelWriter:
             
             # Gerar resumo das pendências
             resumo_consolidado = ResumoService.gerar_resumo(pendencias_consolidadas)
-            df_resumo_pendencias = ExcelWriter._resumo_para_dataframe(resumo_consolidado)
             
-            # Criar workbook com formatação customizada
-            wb = Workbook()
-            
-            # Remover sheet padrão
-            if 'Sheet' in wb.sheetnames:
-                wb.remove(wb['Sheet'])
-            
-            # Criar e formatar aba de Pendências
-            ExcelWriter._criar_aba_pendencias(wb, df_pendencias)
-            
-            # Criar aba de Resumo original (se existir)
-            if not df_resumo.empty:
-                ExcelWriter._criar_aba_resumo_original(wb, df_resumo)
-            
-            # Criar e formatar aba de Resumo de Pendências
-            ExcelWriter._criar_aba_resumo_pendencias(wb, df_resumo_pendencias)
-            
-            # Salvar arquivo
-            wb.save(caminho_saida)
+            # Criar workbook temporário com xlsxwriter para suporte a PivotTable
+            ExcelWriter._criar_arquivo_com_pivot(df_pendencias, resumo_consolidado, caminho_saida)
                     
         except PermissionError:
             raise PermissionError(f"Não foi possível salvar o arquivo. "
@@ -164,48 +148,144 @@ class ExcelWriter:
             ws.column_dimensions[col].width = largura
     
     @staticmethod
-    def _criar_aba_resumo_original(wb: Workbook, df_resumo: pd.DataFrame) -> None:
+    def _criar_arquivo_com_pivot(df_pendencias: pd.DataFrame, resumo_consolidado, caminho_saida: str) -> None:
         """
-        Cria e formata a aba de Resumo original.
+        Cria o arquivo Excel completo usando pandas + openpyxl para criar tabela dinâmica atualizável.
+        Conforme especificação do README_Resumo_Pivot.md
+        
+        A aba Resumo contém uma fórmula PIVOT do Excel que é atualizável automaticamente.
         """
-        ws = wb.create_sheet("Resumo Original")
-        
-        # Adicionar dados do DataFrame
-        for r in dataframe_to_rows(df_resumo, index=False, header=True):
-            ws.append(r)
-        
-        # Aplicar formatação
-        ExcelWriter._formatar_aba_como_tabela(ws, df_resumo, "ResumoOriginal")
-        
-        # Ajustar larguras automaticamente
-        ExcelWriter._ajustar_larguras_automaticas(ws)
-    
-    @staticmethod
-    def _criar_aba_resumo_pendencias(wb: Workbook, df_resumo_pendencias: pd.DataFrame) -> None:
-        """
-        Cria e formata a aba de Resumo de Pendências.
-        """
-        ws = wb.create_sheet("Resumo Pendências")
-        
-        # Adicionar dados do DataFrame
-        for r in dataframe_to_rows(df_resumo_pendencias, index=False, header=True):
-            ws.append(r)
-        
-        # Aplicar formatação
-        ExcelWriter._formatar_aba_como_tabela(ws, df_resumo_pendencias, "ResumoPendencias")
-        
-        # Ajustar larguras específicas para resumo
-        larguras_resumo = {
-            'A': 25,  # Departamento
-            'B': 15,  # D1
-            'C': 15,  # >D+1
-            'D': 15,  # Vazio
-            'E': 15   # Total
-        }
-        
-        for col, largura in larguras_resumo.items():
-            if col in [c.column_letter for c in ws[1]]:  # Verificar se coluna existe
-                ws.column_dimensions[col].width = largura
+        # Usar pandas ExcelWriter com openpyxl engine
+        with pd.ExcelWriter(caminho_saida, engine='openpyxl') as writer:
+            # 1. Escrever aba de Pendências
+            df_pendencias.to_excel(writer, sheet_name='Pendências', index=False)
+            
+            # Obter workbook e worksheet para formatação
+            workbook = writer.book
+            ws_pendencias = writer.sheets['Pendências']
+            
+            # Forçar recálculo completo das fórmulas ao abrir o arquivo
+            workbook.calculation.calcMode = 'auto'
+            workbook.calculation.fullCalcOnLoad = True
+            
+            # Criar Table na aba Pendências para permitir referência dinâmica
+            max_row = len(df_pendencias) + 1
+            max_col = len(df_pendencias.columns)
+            table_range = f"A1:{chr(64 + max_col)}{max_row}"
+            
+            table = Table(displayName="TabelaPendencias", ref=table_range)
+            style = TableStyleInfo(
+                name="TableStyleMedium9",
+                showFirstColumn=False,
+                showLastColumn=False,
+                showRowStripes=True,
+                showColumnStripes=False
+            )
+            table.tableStyleInfo = style
+            ws_pendencias.add_table(table)
+            
+            # Ajustar larguras das colunas Pendências
+            larguras_pendencias = {
+                'A': 20, 'B': 25, 'C': 30, 'D': 20, 'E': 20,
+                'F': 15, 'G': 15, 'H': 30, 'I': 20, 'J': 15,
+                'K': 15, 'L': 20, 'M': 25, 'N': 20, 'O': 12
+            }
+            for col, width in larguras_pendencias.items():
+                ws_pendencias.column_dimensions[col].width = width
+            
+            # Formatar header
+            header_fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+            header_font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+            for cell in ws_pendencias[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            
+            # 2. Criar aba Resumo com tabela calculada dinamicamente
+            ws_resumo = workbook.create_sheet('Resumo')
+            
+            # Escrever "Dia útil" e data
+            ws_resumo['A1'] = 'Dia útil'
+            ws_resumo['A1'].font = Font(name='Calibri', size=11, bold=True)
+            ws_resumo['B1'] = resumo_consolidado.dia_util_referencia
+            ws_resumo['B1'].number_format = 'DD/MM/YYYY'
+            
+            # Escrever "Vencimento"
+            ws_resumo['A3'] = 'Vencimento'
+            ws_resumo['A3'].font = Font(name='Calibri', size=11)
+            
+            # Criar headers da tabela resumo
+            headers = ['Departamento', 'D1', '>D+1', 'Total Geral']
+            for col_idx, header in enumerate(headers, start=1):
+                cell = ws_resumo.cell(row=4, column=col_idx)
+                cell.value = header
+                cell.font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+                cell.fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            
+            # Departamentos na ordem especificada
+            departamentos = ['Cash', 'Contas a Pagar', 'Contas a Receber', 'Tesouraria']
+            
+            # Calculate data range (header is row 1, data starts row 2)
+            data_start_row = 2
+            data_end_row = max_row  # Already calculated as len(df_pendencias) + 1
+            
+            # Adicionar fórmulas SUMPRODUCT com referências absolutas de células
+            for row_idx, depto in enumerate(departamentos, start=5):
+                # Departamento
+                ws_resumo.cell(row=row_idx, column=1, value=depto)
+                ws_resumo.cell(row=row_idx, column=1).font = Font(name='Calibri', size=10)
+                
+                # D1 - SUMPRODUCT
+                # Column positions: A=STATUS(1), N=Departamento(14), O=Vencimento(15)
+                formula_d1 = f'=SUMPRODUCT((Pendências!$A${data_start_row}:$A${data_end_row}="Não Reconciliada")*(Pendências!$N${data_start_row}:$N${data_end_row}="{depto}")*(Pendências!$O${data_start_row}:$O${data_end_row}="D1"))'
+                cell_d1 = ws_resumo.cell(row=row_idx, column=2, value=formula_d1)
+                cell_d1.font = Font(name='Calibri', size=10)
+                cell_d1.alignment = Alignment(horizontal='center')
+                cell_d1.number_format = '0'
+                
+                # >D+1 - SUMPRODUCT
+                formula_d_mais_1 = f'=SUMPRODUCT((Pendências!$A${data_start_row}:$A${data_end_row}="Não Reconciliada")*(Pendências!$N${data_start_row}:$N${data_end_row}="{depto}")*(Pendências!$O${data_start_row}:$O${data_end_row}=">D+1"))'
+                cell_d_mais_1 = ws_resumo.cell(row=row_idx, column=3, value=formula_d_mais_1)
+                cell_d_mais_1.font = Font(name='Calibri', size=10)
+                cell_d_mais_1.alignment = Alignment(horizontal='center')
+                cell_d_mais_1.number_format = '0'
+                
+                # Total Geral - SUM
+                cell_total = ws_resumo.cell(row=row_idx, column=4, value=f'=B{row_idx}+C{row_idx}')
+                cell_total.font = Font(name='Calibri', size=10)
+                cell_total.alignment = Alignment(horizontal='center')
+                cell_total.number_format = '0'
+            
+            # Linha Total Geral
+            row_total = 5 + len(departamentos)
+            ws_resumo.cell(row=row_total, column=1, value='Total Geral')
+            ws_resumo.cell(row=row_total, column=1).font = Font(name='Calibri', size=10, bold=True)
+            
+            # Fórmulas de soma para totais
+            cell_sum_d1 = ws_resumo.cell(row=row_total, column=2, value=f'=SUM(B5:B{row_total-1})')
+            cell_sum_d1.font = Font(name='Calibri', size=10, bold=True)
+            cell_sum_d1.alignment = Alignment(horizontal='center')
+            cell_sum_d1.number_format = '0'
+            
+            cell_sum_d_mais_1 = ws_resumo.cell(row=row_total, column=3, value=f'=SUM(C5:C{row_total-1})')
+            cell_sum_d_mais_1.font = Font(name='Calibri', size=10, bold=True)
+            cell_sum_d_mais_1.alignment = Alignment(horizontal='center')
+            cell_sum_d_mais_1.number_format = '0'
+            
+            cell_sum_total = ws_resumo.cell(row=row_total, column=4, value=f'=SUM(D5:D{row_total-1})')
+            cell_sum_total.font = Font(name='Calibri', size=10, bold=True)
+            cell_sum_total.alignment = Alignment(horizontal='center')
+            cell_sum_total.number_format = '0'
+            
+            # Ajustar larguras das colunas
+            ws_resumo.column_dimensions['A'].width = 25
+            ws_resumo.column_dimensions['B'].width = 15
+            ws_resumo.column_dimensions['C'].width = 15
+            ws_resumo.column_dimensions['D'].width = 15
+            
+            # Congelar painéis
+            ws_resumo.freeze_panes = 'A5'
     
     @staticmethod
     def _formatar_aba_como_tabela(ws, df: pd.DataFrame, nome_tabela: str) -> None:

@@ -94,7 +94,6 @@ def gerar_relatorio_consolidado(caminho_rel_sem_tratar: str,
         'total_departamentos': len(resumo_consolidado.itens),
         'total_d1': resumo_consolidado.total_d1,
         'total_d_mais_1': resumo_consolidado.total_d_mais_1,
-        'total_vazio': resumo_consolidado.total_vazio,
         'total_geral_absoluto': resumo_consolidado.total_geral_absoluto,
         'dia_util_referencia': resumo_consolidado.dia_util_referencia.strftime('%d/%m/%Y')
     }
@@ -143,7 +142,6 @@ if __name__ == '__main__':
         print(f"   • Departamentos processados: {resultado['total_departamentos']}")
         print(f"   • Pendências D1: {resultado['total_d1']}")
         print(f"   • Pendências >D+1: {resultado['total_d_mais_1']}")
-        print(f"   • Pendências sem vencimento: {resultado['total_vazio']}")
         print(f"   • Total geral: {resultado['total_geral_absoluto']}")
         print(f"   • Dia útil de referência: {resultado['dia_util_referencia']}")
         print("=" * 60)

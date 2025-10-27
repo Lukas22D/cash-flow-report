@@ -168,21 +168,9 @@ class ExcelWriter:
             workbook.calculation.calcMode = 'auto'
             workbook.calculation.fullCalcOnLoad = True
             
-            # Criar Table na aba Pendências para permitir referência dinâmica
+            # Configurar aba Pendências sem estilo de tabela
             max_row = len(df_pendencias) + 1
             max_col = len(df_pendencias.columns)
-            table_range = f"A1:{chr(64 + max_col)}{max_row}"
-            
-            table = Table(displayName="TabelaPendencias", ref=table_range)
-            style = TableStyleInfo(
-                name="TableStyleMedium9",
-                showFirstColumn=False,
-                showLastColumn=False,
-                showRowStripes=True,
-                showColumnStripes=False
-            )
-            table.tableStyleInfo = style
-            ws_pendencias.add_table(table)
             
             # Ajustar larguras das colunas Pendências
             larguras_pendencias = {
@@ -193,31 +181,50 @@ class ExcelWriter:
             for col, width in larguras_pendencias.items():
                 ws_pendencias.column_dimensions[col].width = width
             
-            # Formatar header
-            header_fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
-            header_font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+            # Definir bordas cinza escuro
+            border_style = Border(
+                left=Side(style='thin', color='808080'),
+                right=Side(style='thin', color='808080'),
+                top=Side(style='thin', color='808080'),
+                bottom=Side(style='thin', color='808080')
+            )
+            
+            # Formatar todas as células com bordas e fonte tamanho 10
+            for row in ws_pendencias.iter_rows(min_row=1, max_row=max_row, min_col=1, max_col=max_col):
+                for cell in row:
+                    cell.border = border_style
+                    cell.font = Font(name='Calibri', size=10)
+                    cell.alignment = Alignment(horizontal='left', vertical='center')
+            
+            # Formatar header (primeira linha) - negrito
             for cell in ws_pendencias[1]:
-                cell.fill = header_fill
-                cell.font = header_font
+                cell.font = Font(name='Calibri', size=10, bold=True)
                 cell.alignment = Alignment(horizontal='center', vertical='center')
+            
+            # Formatar coluna F (DATA_EXTRATO) - formato DD/MM/AAAA
+            for row in range(2, max_row + 1):
+                cell = ws_pendencias[f'F{row}']
+                cell.number_format = 'DD/MM/YYYY'
+            
+            # Formatar coluna K (VALOR) - formato Contábil sem símbolo
+            for row in range(2, max_row + 1):
+                cell = ws_pendencias[f'K{row}']
+                cell.number_format = '_-* #,##0.00_-;-* #,##0.00_-;_-* "-"??_-;_-@_-'
+                cell.alignment = Alignment(horizontal='right', vertical='center')
             
             # 2. Criar aba Resumo com tabela calculada dinamicamente
             ws_resumo = workbook.create_sheet('Resumo')
             
-            # Escrever "Dia útil" e data
+            # Escrever "Dia útil" e data do dia útil anterior
             ws_resumo['A1'] = 'Dia útil'
             ws_resumo['A1'].font = Font(name='Calibri', size=11, bold=True)
             ws_resumo['B1'] = resumo_consolidado.dia_util_referencia
             ws_resumo['B1'].number_format = 'DD/MM/YYYY'
             
-            # Escrever "Vencimento"
-            ws_resumo['A3'] = 'Vencimento'
-            ws_resumo['A3'].font = Font(name='Calibri', size=11)
-            
-            # Criar headers da tabela resumo
+            # Criar headers da tabela resumo (linha 3, sem texto "Vencimento")
             headers = ['Departamento', 'D1', '>D+1', 'Total Geral']
             for col_idx, header in enumerate(headers, start=1):
-                cell = ws_resumo.cell(row=4, column=col_idx)
+                cell = ws_resumo.cell(row=3, column=col_idx)
                 cell.value = header
                 cell.font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
                 cell.fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
@@ -231,7 +238,7 @@ class ExcelWriter:
             data_end_row = max_row  # Already calculated as len(df_pendencias) + 1
             
             # Adicionar fórmulas SUMPRODUCT com referências absolutas de células
-            for row_idx, depto in enumerate(departamentos, start=5):
+            for row_idx, depto in enumerate(departamentos, start=4):
                 # Departamento
                 ws_resumo.cell(row=row_idx, column=1, value=depto)
                 ws_resumo.cell(row=row_idx, column=1).font = Font(name='Calibri', size=10)
@@ -258,22 +265,22 @@ class ExcelWriter:
                 cell_total.number_format = '0'
             
             # Linha Total Geral
-            row_total = 5 + len(departamentos)
+            row_total = 4 + len(departamentos)
             ws_resumo.cell(row=row_total, column=1, value='Total Geral')
             ws_resumo.cell(row=row_total, column=1).font = Font(name='Calibri', size=10, bold=True)
             
             # Fórmulas de soma para totais
-            cell_sum_d1 = ws_resumo.cell(row=row_total, column=2, value=f'=SUM(B5:B{row_total-1})')
+            cell_sum_d1 = ws_resumo.cell(row=row_total, column=2, value=f'=SUM(B4:B{row_total-1})')
             cell_sum_d1.font = Font(name='Calibri', size=10, bold=True)
             cell_sum_d1.alignment = Alignment(horizontal='center')
             cell_sum_d1.number_format = '0'
             
-            cell_sum_d_mais_1 = ws_resumo.cell(row=row_total, column=3, value=f'=SUM(C5:C{row_total-1})')
+            cell_sum_d_mais_1 = ws_resumo.cell(row=row_total, column=3, value=f'=SUM(C4:C{row_total-1})')
             cell_sum_d_mais_1.font = Font(name='Calibri', size=10, bold=True)
             cell_sum_d_mais_1.alignment = Alignment(horizontal='center')
             cell_sum_d_mais_1.number_format = '0'
             
-            cell_sum_total = ws_resumo.cell(row=row_total, column=4, value=f'=SUM(D5:D{row_total-1})')
+            cell_sum_total = ws_resumo.cell(row=row_total, column=4, value=f'=SUM(D4:D{row_total-1})')
             cell_sum_total.font = Font(name='Calibri', size=10, bold=True)
             cell_sum_total.alignment = Alignment(horizontal='center')
             cell_sum_total.number_format = '0'
@@ -285,7 +292,7 @@ class ExcelWriter:
             ws_resumo.column_dimensions['D'].width = 15
             
             # Congelar painéis
-            ws_resumo.freeze_panes = 'A5'
+            ws_resumo.freeze_panes = 'A4'
     
     @staticmethod
     def _formatar_aba_como_tabela(ws, df: pd.DataFrame, nome_tabela: str) -> None:

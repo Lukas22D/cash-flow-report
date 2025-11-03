@@ -5,9 +5,11 @@ from services.resumo_service import ResumoService
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 import xlsxwriter
 import os
+from datetime import date, timedelta
 
 
 class ExcelWriter:
@@ -215,10 +217,26 @@ class ExcelWriter:
             # 2. Criar aba Resumo com tabela calculada dinamicamente
             ws_resumo = workbook.create_sheet('Resumo')
             
+            # Calcular dia útil anterior
+            def _calcular_dia_util_anterior() -> date:
+                """Calcula o último dia útil anterior à data atual."""
+                data_atual = date.today()
+                dia_semana = data_atual.weekday()  # 0=Segunda, 1=Terça, ..., 6=Domingo
+                
+                if dia_semana == 0:  # Segunda-feira
+                    dias_para_voltar = 3  # Voltar para sexta-feira anterior
+                elif dia_semana == 6:  # Domingo
+                    dias_para_voltar = 2  # Voltar para sexta-feira anterior
+                else:  # Terça a Sábado
+                    dias_para_voltar = 1  # Voltar 1 dia (dia útil anterior)
+                
+                return data_atual - timedelta(days=dias_para_voltar)
+            
             # Escrever "Dia útil" e data do dia útil anterior
             ws_resumo['A1'] = 'Dia útil'
             ws_resumo['A1'].font = Font(name='Calibri', size=11, bold=True)
-            ws_resumo['B1'] = resumo_consolidado.dia_util_referencia
+            dia_util_anterior = _calcular_dia_util_anterior()
+            ws_resumo['B1'] = dia_util_anterior
             ws_resumo['B1'].number_format = 'DD/MM/YYYY'
             
             # Criar headers da tabela resumo (linha 3, sem texto "Vencimento")
@@ -230,12 +248,58 @@ class ExcelWriter:
                 cell.fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
                 cell.alignment = Alignment(horizontal='center', vertical='center')
             
-            # Departamentos na ordem especificada
-            departamentos = ['Cash', 'Contas a Pagar', 'Contas a Receber', 'Tesouraria']
+            # Obter todos os departamentos únicos da coluna DEPARTAMENTO
+            coluna_departamento = None
+            if 'DEPARTAMENTO' in df_pendencias.columns:
+                coluna_departamento = 'DEPARTAMENTO'
+            elif 'Departamento' in df_pendencias.columns:
+                coluna_departamento = 'Departamento'
+            
+            if coluna_departamento:
+                # Extrair departamentos únicos, remover nulos e vazios, e ordenar
+                departamentos_serie = df_pendencias[coluna_departamento].dropna().astype(str).str.strip()
+                departamentos = [d for d in departamentos_serie.unique().tolist() if d and d != '']
+                # Ordenar: primeiro os padrão na ordem especificada, depois os demais
+                ordem_prioritaria = ["Cash", "Contas a Pagar", "Contas a Receber", "Tesouraria"]
+                departamentos_ordenados = []
+                # Adicionar na ordem prioritária se existirem
+                for depto_prioritario in ordem_prioritaria:
+                    if depto_prioritario in departamentos:
+                        departamentos_ordenados.append(depto_prioritario)
+                # Adicionar os demais departamentos que não estão na ordem prioritária
+                for depto in departamentos:
+                    if depto not in departamentos_ordenados:
+                        departamentos_ordenados.append(depto)
+                departamentos = departamentos_ordenados
+            else:
+                # Fallback: usar lista padrão se não encontrar a coluna
+                departamentos = ['Cash', 'Contas a Pagar', 'Contas a Receber', 'Tesouraria']
             
             # Calculate data range (header is row 1, data starts row 2)
             data_start_row = 2
             data_end_row = max_row  # Already calculated as len(df_pendencias) + 1
+            
+            # Determinar qual é a coluna do Departamento na aba Pendências para a fórmula
+            # Procurar pelo índice da coluna Departamento/DEPARTAMENTO
+            if coluna_departamento:
+                try:
+                    col_indice_departamento = df_pendencias.columns.get_loc(coluna_departamento) + 1  # +1 porque Excel é 1-indexed
+                    col_letra_departamento = get_column_letter(col_indice_departamento)
+                except:
+                    # Fallback: assumir coluna N (14)
+                    col_letra_departamento = 'N'
+            else:
+                # Fallback: assumir coluna N (14)
+                col_letra_departamento = 'N'
+            
+            # Determinar coluna do Vencimento
+            col_letra_vencimento = 'O'  # Assumindo coluna O (15) por padrão
+            if 'Vencimento' in df_pendencias.columns:
+                try:
+                    col_indice_vencimento = df_pendencias.columns.get_loc('Vencimento') + 1
+                    col_letra_vencimento = get_column_letter(col_indice_vencimento)
+                except:
+                    pass  # Usar 'O' como fallback
             
             # Adicionar fórmulas SUMPRODUCT com referências absolutas de células
             for row_idx, depto in enumerate(departamentos, start=4):
@@ -244,15 +308,15 @@ class ExcelWriter:
                 ws_resumo.cell(row=row_idx, column=1).font = Font(name='Calibri', size=10)
                 
                 # D1 - SUMPRODUCT
-                # Column positions: A=STATUS(1), N=Departamento(14), O=Vencimento(15)
-                formula_d1 = f'=SUMPRODUCT((Pendências!$A${data_start_row}:$A${data_end_row}="Não Reconciliada")*(Pendências!$N${data_start_row}:$N${data_end_row}="{depto}")*(Pendências!$O${data_start_row}:$O${data_end_row}="D1"))'
+                # Column positions: A=STATUS(1), coluna_departamento=Departamento, coluna_vencimento=Vencimento
+                formula_d1 = f'=SUMPRODUCT((Pendências!$A${data_start_row}:$A${data_end_row}="Não Reconciliada")*(Pendências!${col_letra_departamento}${data_start_row}:${col_letra_departamento}${data_end_row}="{depto}")*(Pendências!${col_letra_vencimento}${data_start_row}:${col_letra_vencimento}${data_end_row}="D1"))'
                 cell_d1 = ws_resumo.cell(row=row_idx, column=2, value=formula_d1)
                 cell_d1.font = Font(name='Calibri', size=10)
                 cell_d1.alignment = Alignment(horizontal='center')
                 cell_d1.number_format = '0'
                 
                 # >D+1 - SUMPRODUCT
-                formula_d_mais_1 = f'=SUMPRODUCT((Pendências!$A${data_start_row}:$A${data_end_row}="Não Reconciliada")*(Pendências!$N${data_start_row}:$N${data_end_row}="{depto}")*(Pendências!$O${data_start_row}:$O${data_end_row}=">D+1"))'
+                formula_d_mais_1 = f'=SUMPRODUCT((Pendências!$A${data_start_row}:$A${data_end_row}="Não Reconciliada")*(Pendências!${col_letra_departamento}${data_start_row}:${col_letra_departamento}${data_end_row}="{depto}")*(Pendências!${col_letra_vencimento}${data_start_row}:${col_letra_vencimento}${data_end_row}=">D+1"))'
                 cell_d_mais_1 = ws_resumo.cell(row=row_idx, column=3, value=formula_d_mais_1)
                 cell_d_mais_1.font = Font(name='Calibri', size=10)
                 cell_d_mais_1.alignment = Alignment(horizontal='center')
